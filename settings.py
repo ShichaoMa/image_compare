@@ -1,0 +1,11 @@
+# -*- coding:utf-8 -*-
+
+REDIS_HOST = "192.168.200.94"
+REDIS_PORT = 6379
+
+LOG_LEVEL = 'DEBUG'
+LOG_STDOUT = True
+LOG_JSON = False
+LOG_DIR = "logs"
+LOG_MAX_BYTES = '10MB'
+LOG_BACKUPS = 5

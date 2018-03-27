@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>图片去重程序</title>
+</head>
+<script src="http://apps.bdimg.com/libs/jquery/2.1.1/jquery.min.js" ></script>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+
+<style type="text/css">
+     #parent{width:550px; height:10px; border:0px solid #09F;}
+     #son {width:0; height:100%; background-color:#09F; text-align:center; line-height:10px; font-size:20px; font-weight:bold;}
+     .green{border:3px solid green;width:140px;hight:140px;}
+     .red{border:3px solid red;width:140px;hight:140px;}
+     .yellow{border:3px solid yellow;width:140px;hight:140px;}
+     .black{border:3px solid black;width:140px;hight:140px;}
+     .gray{border:3px solid gray;width:140px;hight:140px;}
+     .blue{border:3px solid blue;width:140px;hight:140px;}
+     .pink{border:3px solid pink;width:140px;hight:140px;}
+     .brown{border:3px solid brown;width:140px;hight:140px;}
+</style>
+<script type="text/javascript">
+    var id = null;
+    var del_ele = null;
+    var colors = null;
+    $(document).ready(function(){
+        $("#start").click(function(){
+            var file_input = $("#file");
+            var file = file_input.get(0).files[0];
+            if(!check_staffix(file_input)){
+                return false;
+            }
+            var formData = new FormData();
+            formData.append("file" , file);
+
+            /**
+             * 必须false才会避开jQuery对 formdata 的默认处理
+             * XMLHttpRequest会对 formdata 进行正确的处理
+             */
+            var container = $("#cloner");
+            container.html("");
+            var p = $("#status");
+            var str = "服务器正在进行图片比较，请等待"
+
+            id = setInterval(function(){
+                str = str + "."
+                p.html(str);
+            }, 1000)
+
+            $.ajax({
+                type: "POST",
+                url: "/upload",
+                data: formData ,
+                processData : false,
+                //必须false才会自动加上正确的Content-Type
+                contentType : false ,
+                xhr: function(){
+                    var xhr = $.ajaxSettings.xhr();
+                    if(onprogress && xhr.upload) {
+                        xhr.upload.addEventListener("progress" , onprogress, false);
+                        return xhr;
+                    }
+                },
+                success:pass,
+                error:errored
+            });
+        });
+
+        function scrollImg(th){
+            var inp = $(th).next("input");
+            var posX,posY;
+            if (window.innerHeight) {
+                posX = window.pageXOffset;
+                posY = window.pageYOffset;
+            }
+            else if (document.documentElement && document.documentElement.scrollTop) {
+                posX = document.documentElement.scrollLeft;
+                posY = document.documentElement.scrollTop;
+            }
+            else if (document.body) {
+                posX = document.body.scrollLeft;
+                posY = document.body.scrollTop;
+            }
+
+            var ad=$("#d1");
+            ad.html(inp.val());
+            ad.css("top", (posY+100)+"px");
+            ad.css("left", (posX+50)+"px");
+        }
+
+        var file = $("#file");
+        file.change(check_staffix);
+
+        function check_staffix(file){
+            if(file.type=="change"){
+                file = this;
+            }
+            var file = $(file).get(0).files[0];
+            if(!file.name.endsWith("zip")){
+                alert("文件类型必须为zip格式");
+                return false;
+            }
+            return true;
+        }
+
+        function* colorGen(){
+            var colors = ["green", "red", "yellow",
+                "black", "pink", "blue", "gray", "brown"];
+            while(true) {
+                for (var i in colors) {
+                    yield colors[i];
+                }
+            }
+        }
+        colors = colorGen();
+
+        function succed (data){
+            var p = $("#status");
+            clearInterval(id);
+            p.html("");
+            var container = $("#cloner");
+            container.html("");
+            var template = $(".template");
+            var new_node = getNewNode(template);
+            var count = 0;
+            if(!data.groups.length){
+                stop();
+            }
+            var color = colors.next();
+            for (var ele in data.groups) {
+                for(var i in  data.groups[ele]) {
+                    let img = $(new_node.children("img")[count]);
+                    img.addClass(color.value);
+                    img.attr("src", data.groups[ele][i]);
+                    img.dblclick(del);
+                    var l = data.groups[ele][i].split("/");
+                    img.attr("title", l[l.length-2]);
+                    count++;
+                    if (count == 11) {
+                        container.append(new_node);
+                        new_node = getNewNode(template);
+                        count = 0;
+                    }
+                }
+                color = colors.next();
+            }
+            if(count){
+                container.append(new_node);
+            }
+        }
+
+        function stop(){
+            var p = $("#status");
+            $.ajax({
+                type: "GET",
+                url: "/stop",
+                success:function(data){
+                    if(data.finished){
+                        p.html("Finished. ");
+                        window.location.href = "/download/"+data.filename
+                    }
+                },
+                error:errored
+            });
+        }
+
+        function getNewNode(template){
+            var new_node = template.clone(true);
+            new_node.attr("class", "instance")
+            new_node.css("display", "inline");
+            return new_node;
+        }
+
+        function errored(){
+            alert("failed");
+        }
+        /**
+         *    侦查附件上传情况    ,这个方法大概0.05-0.1秒执行一次
+         */
+        function onprogress(evt){
+            var loaded = evt.loaded;                  //已经上传大小情况
+            var tot = evt.total;                      //附件总大小
+            var per = Math.floor(100*loaded/tot);      //已经上传的百分比
+            $("#son").html( per +"%" );
+            $("#son").css("width" , per +"%");
+        }
+
+        function del(){
+            var that = $(this);
+            var src = that.attr("src");
+            $.ajax({
+                type: "GET",
+                url: "/remove/"+src,
+                success:function(data){
+                    if(data.success){
+                        that.css("display", "none");
+                        del_ele = that;
+                        $("#del_img").val(src);
+                    }else {
+                        alert("没有找到图片!")
+                    }
+                },
+                error:errored
+            });
+        }
+
+        function pass() {
+            $.ajax({
+                type: "GET",
+                url: "/pass/100",
+                success: succed,
+                error: errored
+            });
+        }
+
+        $("#pass").click(pass);
+        $("#pass2").click(pass);
+
+        $("#stop").click(stop);
+
+        document.oncontextmenu = function(e){
+            e.preventDefault();
+        };
+
+        $("#cloner").mousedown(function(){
+            if(event.button == 2){
+                var del_img = $("#del_img").val();
+                if(del_ele && del_img){
+                    $("#del_img").val("");
+                    $.ajax({
+                        type: "GET",
+                        url:"/reset/"+del_img,
+                        success:function(data){
+                            if(data.success) {
+                                del_ele.css("display", "inline");
+                            }else {
+                                alert("没有找到图片!")
+                            }
+                        }
+                    });
+                }
+            }
+        });
+    });
+</script>
+<body>
+    <div id="parent">
+        <div id="son"></div>
+    </div>
+    <br>
+        <div>
+            <ul>
+                <li>上传图片压缩包，服务器对图片进行处理，回显相似图片，不同组使用不同颜色标记</li>
+                <li>将鼠标悬浮在图片之上，可显示图片所属分类</li>
+                <li>双击图片进行删除， 右击撤销上一步删除操作</li>
+                <li>点击pass，对下页图片进行去图处理</li>
+                <li>点击stop,下载处理完毕的图片压缩包</li>
+            </ul>
+        </div>
+        图片压缩包(zip)：<input type="file" name="file" id="file"/>
+        <input type="button" id="start" value="start" />
+        <input type="button" id="pass" value="pass" />
+        <input type="button" id="stop" value="stop" />
+        <input type="hidden" id="del_img", value=""/>
+            <p id="status"></p>
+            <div class="template" style="display: none">
+                <img/>
+                <img/>
+                <img/>
+                <img/>
+                <img/>
+                <img/>
+                <img/>
+                <img/>
+                <img/>
+                <img/>
+                <img/>
+                <img/>
+            </div>
+            <div id="cloner" ></div>
+        <input type="button" id="pass2" value="pass" />
+</body>
+</html>
